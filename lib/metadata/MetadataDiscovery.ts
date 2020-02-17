@@ -9,6 +9,7 @@ import { MetadataStorage } from './MetadataStorage';
 import { Cascade, ReferenceType } from '../entity';
 import { Platform } from '../platforms';
 import { Type } from '../types';
+import { EntitySchema } from '../schema';
 
 export class MetadataDiscovery {
 
@@ -94,7 +95,7 @@ export class MetadataDiscovery {
     }
   }
 
-  private prepare<T extends AnyEntity<T>>(entity: EntityClass<T> | EntityClassGroup<T>): EntityClass<T> {
+  private prepare<T extends AnyEntity<T>>(entity: EntityClass<T> | EntityClassGroup<T> | EntitySchema<T>): EntityClass<T> | EntitySchema<T> {
     // save path to entity from schema
     if ('entity' in entity && 'schema' in entity) {
       const schema = entity.schema;
@@ -107,33 +108,45 @@ export class MetadataDiscovery {
     return entity;
   }
 
-  private async discoverEntity<T extends AnyEntity<T>>(entity: EntityClass<T> | EntityClassGroup<T>, path?: string): Promise<void> {
+  private async discoverEntity<T extends AnyEntity<T>>(entity: EntityClass<T> | EntityClassGroup<T> | EntitySchema<T>, path?: string): Promise<void> {
     entity = this.prepare(entity);
     this.logger.log('discovery', `- processing entity ${chalk.cyan(entity.name)}`);
+    let meta: EntityMetadata<T>;
 
-    const meta = this.metadata.get(entity.name, true);
-    meta.class = entity as Constructor<T>;
-    meta.prototype = entity.prototype;
-    meta.className = entity.name;
-    meta.path = Utils.relativePath(path || meta.path, this.config.get('baseDir'));
-    meta.toJsonParams = Utils.getParamNames(entity, 'toJSON').filter(p => p !== '...args');
-    const cache = meta.path && await this.cache.get(entity.name + extname(meta.path));
+    if (entity instanceof EntitySchema) {
+      meta = entity.getMetadata();
 
-    if (cache) {
-      this.logger.log('discovery', `- using cached metadata for entity ${chalk.cyan(entity.name)}`);
-      this.metadataProvider.loadFromCache(meta, cache);
-      this.discovered.push(meta);
+      if (!meta.collection && meta.name) {
+        meta.collection = this.namingStrategy.classToTableName(meta.name);
+      }
 
-      return;
+      this.metadata.set(meta.className, meta);
+    } else {
+      meta = this.metadata.get(entity.name, true);
+      meta.class = entity as Constructor<T>;
+      meta.prototype = entity.prototype;
+      meta.className = entity.name;
+      meta.path = Utils.relativePath(path || meta.path, this.config.get('baseDir'));
+      meta.toJsonParams = Utils.getParamNames(entity, 'toJSON').filter(p => p !== '...args');
+      const cache = meta.path && await this.cache.get(entity.name + extname(meta.path));
+
+      if (cache) {
+        this.logger.log('discovery', `- using cached metadata for entity ${chalk.cyan(entity.name)}`);
+        this.metadataProvider.loadFromCache(meta, cache);
+        this.discovered.push(meta);
+
+        return;
+      }
+
+      await this.metadataProvider.loadEntityMetadata(meta, entity.name);
+
+      if (!meta.collection && meta.name) {
+        meta.collection = this.namingStrategy.classToTableName(meta.name);
+      }
+
+      await this.saveToCache(meta, entity);
     }
 
-    await this.metadataProvider.loadEntityMetadata(meta, entity.name);
-
-    if (!meta.collection && meta.name) {
-      meta.collection = this.namingStrategy.classToTableName(meta.name);
-    }
-
-    await this.saveToCache(meta, entity);
     this.discovered.push(meta);
   }
 

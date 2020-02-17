@@ -30,6 +30,7 @@ export type PropertyOptions = {
   columnType?: string;
   type?: any;
   length?: any;
+  onCreate?: () => any;
   onUpdate?: () => any;
   default?: any;
   nullable?: boolean;
