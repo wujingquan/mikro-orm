@@ -42,11 +42,11 @@ import { MikroORM } from 'mikro-orm';
   const updateDump = await generator.getUpdateSchemaSQL();
   console.log(updateDump);
 
-  // there is also `generate()` method that returns drop + create queries
+  // `generate()` 方法返回删除和创建的SQL语句（`getDropSchemaSQL` 与 `getCreateSchemaSQL`组合）。
   const dropAndCreateDump = await generator.generate();
   console.log(dropAndCreateDump);
 
-  // or you can run those queries directly, but be sure to check them first!
+  // 或者您可以直接运行这些语句，但是一定要先检查它们是否正确！
   await generator.dropSchema();
   await generator.createSchema();
   await generator.updateSchema();
